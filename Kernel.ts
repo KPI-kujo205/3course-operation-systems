@@ -39,7 +39,7 @@ export class Kernel {
     if (this.freePhysicalPages.length > 0) {
       physicalPage = this.allocateFreePage();
     } else {
-      physicalPage = this.runWSClockAlgorithm();
+      physicalPage = this.randomAlgorithm();
 
       if (!physicalPage.pageTable) throw new Error("Error: Physical page has no associated page table");
 
@@ -98,6 +98,15 @@ export class Kernel {
 
       this.lastUpdatedPageIndex++;
     }
+  }
+
+  private randomAlgorithm(): PhysicalPage {
+    const rnd = Math.floor(Math.random() * this.occupiedPhysicalPages.length);
+    const physPage = this.occupiedPhysicalPages[rnd];
+
+    console.log(`Page replacement: ${physPage} (Random)`);
+
+    return physPage;
   }
 
   private runWSClockAlgorithm(): PhysicalPage {
