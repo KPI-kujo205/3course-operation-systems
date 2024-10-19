@@ -15,9 +15,10 @@ const TOTAL_PHYSICAL_PAGES = 100;
 const INITIAL_PROCESS_COUNT = 3;
 const MAX_RUNNING_PROCESSES = 10;
 const PAGE_STAT_UPDATE_INTERVAL = 15; // number of pages to update per cycle
+const WS_CLOCK_TAU_MS = 200; // number of pages to update per cycle
 
 // Initialize system components
-const kernel = new Kernel(TOTAL_PHYSICAL_PAGES);
+const kernel = new Kernel(TOTAL_PHYSICAL_PAGES, WS_CLOCK_TAU_MS);
 const mmu = new MMU(kernel.handlePageFault.bind(kernel));
 const processQueue: Process[] = [];
 
