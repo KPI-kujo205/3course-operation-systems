@@ -1,30 +1,16 @@
 import { Kernel } from './Kernel';
 import { MMU } from './MMU';
 import { Process } from './Process';
-
-// Configuration constants
-const MIN_PROCESS_REQUESTS = 1200;
-const MAX_PROCESS_REQUESTS = 1800;
-const MIN_PAGE_TABLE_SIZE = 20;
-const MAX_PAGE_TABLE_SIZE = 30;
-const MIN_MEMORY_REQUESTS = 30;
-const MAX_MEMORY_REQUESTS = 50;
-const WORKING_SET_REGENERATION_PROBABILITY = 5; // in percent
-const NEW_PROCESS_CREATION_PROBABILITY = 20; // in percent
-const TOTAL_PHYSICAL_PAGES = 100;
-const INITIAL_PROCESS_COUNT = 3;
-const MAX_RUNNING_PROCESSES = 10;
-const PAGE_STAT_UPDATE_INTERVAL = 15; // number of pages to update per cycle
-const WS_CLOCK_TAU_MS = 200; // number of pages to update per cycle
+import { config } from './config';
 
 // Initialize system components
-const kernel = new Kernel(TOTAL_PHYSICAL_PAGES, WS_CLOCK_TAU_MS);
+const kernel = new Kernel(config.TOTAL_PHYSICAL_PAGES, config.WS_CLOCK_TAU_MS);
 const mmu = new MMU(kernel.handlePageFault.bind(kernel));
 const processQueue: Process[] = [];
 
 // Main entry point
 function main() {
-  initializeProcesses(INITIAL_PROCESS_COUNT);
+  initializeProcesses(config.INITIAL_PROCESS_COUNT);
   setInterval(manageProcesses, 1000); // Runs the process management every second
 }
 
@@ -45,7 +31,7 @@ function manageProcesses() {
     if (shouldRegenerateWorkingSet()) process.generateNewWorkingSet();
 
     // Access memory pages through the MMU
-    process.accessMemoryPages(MIN_MEMORY_REQUESTS, MAX_MEMORY_REQUESTS, mmu);
+    process.accessMemoryPages(config.MIN_MEMORY_REQUESTS, config.MAX_MEMORY_REQUESTS, mmu);
 
     // If the process is completed, free its resources
     if (process.isComplete) {
@@ -58,7 +44,7 @@ function manageProcesses() {
   if (shouldCreateNewProcess()) createNewProcess();
 
   // Update page statistics in the kernel
-  kernel.updatePageStatistics(PAGE_STAT_UPDATE_INTERVAL);
+  kernel.updatePageStatistics(config.PAGE_STAT_UPDATE_INTERVAL);
 
   // Print the current page fault statistics
   printPageFaultStatistics();
@@ -66,7 +52,7 @@ function manageProcesses() {
 
 // Create a new process and add it to the queue
 function createNewProcess() {
-  const process = new Process(MIN_PAGE_TABLE_SIZE, MAX_PAGE_TABLE_SIZE, MIN_PROCESS_REQUESTS, MAX_PROCESS_REQUESTS);
+  const process = new Process(config.MIN_PAGE_TABLE_SIZE, config.MAX_PAGE_TABLE_SIZE, config.MIN_PROCESS_REQUESTS, config.MAX_PROCESS_REQUESTS);
   processQueue.push(process);
 }
 
@@ -78,12 +64,12 @@ function printPageFaultStatistics() {
 
 // Check if it's time to regenerate the working set for a process
 function shouldRegenerateWorkingSet(): boolean {
-  return Math.random() * 100 < WORKING_SET_REGENERATION_PROBABILITY;
+  return Math.random() * 100 < config.WORKING_SET_REGENERATION_PROBABILITY;
 }
 
 // Check if it's time to create a new process
 function shouldCreateNewProcess(): boolean {
-  return processQueue.length < MAX_RUNNING_PROCESSES && Math.random() * 100 < NEW_PROCESS_CREATION_PROBABILITY;
+  return processQueue.length < config.MAX_RUNNING_PROCESSES && Math.random() * 100 < config.NEW_PROCESS_CREATION_PROBABILITY;
 }
 
 // Start the main program loop

@@ -13,22 +13,26 @@ export class Kernel {
   totalPageFaults: number = 0;
   private clockHandIndex: number = 0;
   private lastUpdatedPageIndex: number = 0;
-  private currentTime: number = 0;
-  private tau: number; // Working set time window
+  private currentTime: number = Date.now();
+  private tau: number; // Working set time window in milliseconds
   private pageAccessTimes: Map<number, number> = new Map(); // Maps physical page number to last access time
 
-  constructor(physicalPageCount: number, tau: number) {
+  constructor(physicalPageCount: number, tauInMs: number) {
     for (let i = 0; i < physicalPageCount; i++) {
       const physicalPage = new PhysicalPage();
       physicalPage.physicalPageNumber = i;
       this.freePhysicalPages.push(physicalPage);
     }
-    this.tau = tau;
+    this.tau = tauInMs;
+  }
+
+  private updateCurrentTime() {
+    this.currentTime = Date.now();
   }
 
   handlePageFault(pageTable: PageTableEntry[], pageIndex: number) {
+    this.updateCurrentTime();
     this.totalPageFaults++;
-    this.currentTime++;
 
     let physicalPage: PhysicalPage;
 
@@ -72,7 +76,7 @@ export class Kernel {
 
   updatePageStatistics(pagesToUpdate: number) {
     if (this.occupiedPhysicalPages.length === 0) return;
-    this.currentTime++;
+    this.updateCurrentTime();
 
     for (let i = 0; i < pagesToUpdate; i++) {
       if (this.lastUpdatedPageIndex >= this.occupiedPhysicalPages.length) {
@@ -97,12 +101,12 @@ export class Kernel {
   }
 
   private runWSClockAlgorithm(): PhysicalPage {
+    this.updateCurrentTime();
     let candidatePage: PhysicalPage | null = null;
     let oldestPage: PhysicalPage | null = null;
     let oldestTime = Infinity;
 
     const startIndex = this.clockHandIndex;
-
     do {
       const currentPage = this.occupiedPhysicalPages[this.clockHandIndex];
 
