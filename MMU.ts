@@ -5,7 +5,7 @@ export class MMU {
 
   constructor(private handlePageFault: (pageTable: PageTableEntry[], pageIndex: number) => void) { }
 
-  accessPage(pageTable: PageTableEntry[], pageIndex: number, isWrite: boolean) {
+  accessPage(pageTable: PageTableEntry[], pageIndex: number, isWrite: boolean, processNumber: number) {
     this.totalPageAccesses++;
 
     // Handle page fault if page is not present

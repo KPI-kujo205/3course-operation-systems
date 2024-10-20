@@ -1,3 +1,5 @@
+
+
 export class PageTableEntry {
   presenceBit: boolean = false; // Indicates if the page is present in memory
   referenceBit: boolean = false; // Indicates if the page has been referenced

@@ -8,10 +8,15 @@ const kernel = new Kernel(config.TOTAL_PHYSICAL_PAGES, config.WS_CLOCK_TAU_MS);
 const mmu = new MMU(kernel.handlePageFault.bind(kernel));
 const processQueue: Process[] = [];
 
+let minPageFault = Infinity
+let maxPageFault = 0
+let intervalsAmount = 0
+let faultRateSum = 0
+
 // Main entry point
 function main() {
   initializeProcesses(config.INITIAL_PROCESS_COUNT);
-  setInterval(manageProcesses, 1000); // Runs the process management every second
+  setInterval(manageProcesses, config.INTERVAL_MS); // Runs the process management every second
 }
 
 // Initialize the initial processes
@@ -58,9 +63,23 @@ function createNewProcess() {
 
 // Print the page fault statistics
 function printPageFaultStatistics() {
-  const pageFaultPercentage = (kernel.totalPageFaults / mmu.totalPageAccesses);
-  console.log(`Page fault rate: ${pageFaultPercentage.toFixed(2)}%`);
+
+  const pageFaultPercentage = (kernel.totalPageFaults / mmu.totalPageAccesses) * 100;
+  if (pageFaultPercentage > maxPageFault) {
+    maxPageFault = pageFaultPercentage;
+  }
+  if (pageFaultPercentage<minPageFault){
+    minPageFault= pageFaultPercentage;
+  }
+  faultRateSum += pageFaultPercentage;
+  intervalsAmount++;
+
+  console.log(`Page fault rate (interval N${intervalsAmount}): ${pageFaultPercentage.toFixed(2)}%`);
+  console.log(`Min/Max page fault stats: ${minPageFault}% / ${maxPageFault}%`);
+  console.log(`Average page fault: ${faultRateSum/intervalsAmount}%`);
 }
+
+
 
 // Check if it's time to regenerate the working set for a process
 function shouldRegenerateWorkingSet(): boolean {

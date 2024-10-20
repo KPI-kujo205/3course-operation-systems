@@ -1,8 +1,14 @@
 import { PageTableEntry } from "./PageTableEntry";
 import { MMU } from "./MMU";
+import { config } from "./config";
 
 export class Process {
+  static processesCount = 0;
+
+
   pageTable: PageTableEntry[];
+
+  private processNumber: number;
   private workingSet: number[];
   private requestCount: number = 0;
   private readonly requestLimit: number;
@@ -22,6 +28,8 @@ export class Process {
 
     // Set the process request limit
     this.requestLimit = Math.floor(Math.random() * (maxProcessRequests - minProcessRequests + 1) + minProcessRequests);
+
+    this.processNumber = ++Process.processesCount;
   }
 
   get isComplete(): boolean {
@@ -47,10 +55,14 @@ export class Process {
       if (Math.random() < 0.3) isWrite = true;
 
       // Access the page via MMU
-      mmu.accessPage(this.pageTable, pageIndex, isWrite);
+      mmu.accessPage(this.pageTable, pageIndex, isWrite, this.processNumber);
 
       this.requestCount++;
-      console.log(`Process ${this.requestCount}/${this.requestLimit}, page index ${pageIndex}, read/write ${isWrite}`);
+
+      if (!config.DISABLE_LOGGING) {
+        console.log(`Process ${this.requestCount}/${this.requestLimit}, page index ${pageIndex}, read/write ${isWrite}`);
+      }
+
     }
   }
 

@@ -1,4 +1,5 @@
 import { PageTableEntry } from "./PageTableEntry";
+import { config } from "./config";
 import { Process } from "./Process";
 
 export class PhysicalPage {
@@ -11,9 +12,11 @@ export class Kernel {
   freePhysicalPages: PhysicalPage[] = [];
   occupiedPhysicalPages: PhysicalPage[] = [];
   totalPageFaults: number = 0;
+
   private clockHandIndex: number = 0;
   private lastUpdatedPageIndex: number = 0;
-  private currentTime: number = Date.now();
+
+  private currentTime: number = 0;
   private tau: number; // Working set time window in milliseconds
   private pageAccessTimes: Map<number, number> = new Map(); // Maps physical page number to last access time
 
@@ -27,19 +30,23 @@ export class Kernel {
   }
 
   private updateCurrentTime() {
-    this.currentTime = Date.now();
+    this.currentTime++ ;
   }
 
   handlePageFault(pageTable: PageTableEntry[], pageIndex: number) {
-    this.updateCurrentTime();
     this.totalPageFaults++;
+
 
     let physicalPage: PhysicalPage;
 
     if (this.freePhysicalPages.length > 0) {
       physicalPage = this.allocateFreePage();
     } else {
-      physicalPage = this.randomAlgorithm();
+      if (config.USING_RANDOM_ALGORITHM) {
+        physicalPage = this.randomAlgorithm()
+      } else {
+        physicalPage = this.runWSClockAlgorithm()
+      }
 
       if (!physicalPage.pageTable) throw new Error("Error: Physical page has no associated page table");
 
@@ -48,10 +55,10 @@ export class Kernel {
 
     physicalPage.pageTable = pageTable;
     physicalPage.pageIndex = pageIndex;
+
     pageTable[pageIndex].presenceBit = true;
     pageTable[pageIndex].pageNumber = physicalPage.physicalPageNumber;
-    pageTable[pageIndex].referenceBit = true;
-    pageTable[pageIndex].modifiedBit = false;
+
     this.pageAccessTimes.set(physicalPage.physicalPageNumber, this.currentTime);
   }
 
@@ -94,7 +101,9 @@ export class Kernel {
         this.pageAccessTimes.set(physicalPage.physicalPageNumber, this.currentTime);
       }
 
-      console.log(`Updating page statistics for page at index ${physicalPage.pageIndex}`);
+      if (!config.DISABLE_LOGGING) {
+        console.log(`Updating page statistics for page at index ${physicalPage.pageIndex}`);
+      }
 
       this.lastUpdatedPageIndex++;
     }
@@ -104,7 +113,7 @@ export class Kernel {
     const rnd = Math.floor(Math.random() * this.occupiedPhysicalPages.length);
     const physPage = this.occupiedPhysicalPages[rnd];
 
-    console.log(`Page replacement: ${physPage} (Random)`);
+    console.log(`Page replacement (Random): ${physPage.physicalPageNumber}`);
 
     return physPage;
   }
@@ -122,11 +131,14 @@ export class Kernel {
       if (!currentPage.pageTable) throw new Error("Error: Physical page has no associated page table");
 
       const pageEntry = currentPage.pageTable[currentPage.pageIndex];
+
       const lastAccessTime = this.pageAccessTimes.get(currentPage.physicalPageNumber) || 0;
+
+      this.updateCurrentTime()
+      this.pageAccessTimes.set(currentPage.physicalPageNumber, this.currentTime);
 
       if (pageEntry.referenceBit) {
         pageEntry.referenceBit = false;
-        this.pageAccessTimes.set(currentPage.physicalPageNumber, this.currentTime);
       } else if (this.currentTime - lastAccessTime > this.tau) {
         if (!pageEntry.modifiedBit) {
           candidatePage = currentPage;
@@ -143,24 +155,33 @@ export class Kernel {
     } while (this.clockHandIndex !== startIndex);
 
     if (!candidatePage && oldestPage) {
+      console.log('oldestPage page')
       candidatePage = oldestPage;
     }
 
     if (!candidatePage) {
       candidatePage = this.occupiedPhysicalPages[this.clockHandIndex];
+      console.log('even not oldestPage')
     }
 
     if (candidatePage.pageTable) {
       const selectedPageEntry = candidatePage.pageTable[candidatePage.pageIndex];
       if (selectedPageEntry.modifiedBit) {
-        console.log(`Scheduling write to disk for page ${candidatePage.physicalPageNumber}`);
+        if (!config.DISABLE_LOGGING) {
+          console.log(`Scheduling write to disk for page ${candidatePage.physicalPageNumber}`);
+        }
         // In a real system, this is where we'd schedule the page to be written to disk
         // For this simulation, we'll just reset the modified bit
         selectedPageEntry.modifiedBit = false;
       }
     }
 
-    console.log(`Page replacement (WSClock algorithm): Physical page found ${candidatePage.physicalPageNumber}`);
+    if (!config.DISABLE_LOGGING)
+      console.log(`Page replacement (WSClock algorithm): Physical page found ${candidatePage.physicalPageNumber}`);
+
+
     return candidatePage;
   }
 }
+
+
