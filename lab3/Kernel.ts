@@ -134,6 +134,7 @@ export class Kernel {
 
       const lastAccessTime = this.pageAccessTimes.get(currentPage.physicalPageNumber) || 0;
 
+
       if (pageEntry.referenceBit) {
         pageEntry.referenceBit = false;
         this.pageAccessTimes.set(currentPage.physicalPageNumber, this.currentTime);
