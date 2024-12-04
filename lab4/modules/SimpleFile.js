@@ -73,25 +73,5 @@ export class SimpleFile {
 	 * Truncates the file to a specified length
 	 * @param {number} len - new length of the file
 	 */
-	truncate(len) {
-		this.inode._size = len;
-
-		if (len < this.inode.actualSize) {
-			const links = this.inode.directLinks;
-			const chunkSize = FSConfig.BLOCK_SIZE;
-			const blockIndex = Math.floor(len / chunkSize);
-			const blockOffset = len % chunkSize;
-
-			links.length = blockIndex + 1;
-
-			if (blockOffset === 0) {
-				return;
-			}
-
-			const lastBlock = new Uint8Array(links[blockIndex]);
-			const newLastBlock = lastBlock.slice(0, blockOffset);
-
-			links[blockIndex] = newLastBlock.buffer;
-		}
-	}
+	truncate(len) {}
 }

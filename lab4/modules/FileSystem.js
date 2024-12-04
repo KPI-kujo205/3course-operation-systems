@@ -176,7 +176,6 @@ export class FileSystem {
 		if (!inodeNumber) {
 			throw new Error("File not found");
 		}
-
 		return this.inodes[inodeNumber];
 	}
 
@@ -270,6 +269,33 @@ export class FileSystem {
 
 		const file = new SimpleFile(inode);
 
-		file.truncate(size);
+		file.inode._size = size;
+
+		if (size < file.inode.actualSize) {
+			// reduce the size
+			const links = file.inode.directLinks;
+			const chunkSize = FSConfig.BLOCK_SIZE;
+			const blockIndex = Math.floor(size / chunkSize);
+			const blockOffset = size % chunkSize;
+
+			links.length = blockIndex + 1;
+
+			if (blockOffset === 0) {
+				return;
+			}
+
+			const lastBlock = new Uint8Array(links[blockIndex]);
+			const newLastBlock = lastBlock.slice(0, blockOffset);
+
+			links[blockIndex] = newLastBlock.buffer;
+		} else if (size > file.inode.actualSize) {
+			const chunkSize = FSConfig.BLOCK_SIZE;
+			const additionalSize = size - file.inode.actualSize;
+			const additionalBlocks = Math.ceil(additionalSize / chunkSize);
+
+			for (let i = 0; i < additionalBlocks; i++) {
+				file.inode.directLinks.push(this.allocateBlock());
+			}
+		}
 	}
 }

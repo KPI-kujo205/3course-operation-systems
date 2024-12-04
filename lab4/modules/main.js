@@ -1,7 +1,7 @@
 import { FileSystem } from "./FileSystem.js";
 
 // Usage example
-const fs = new FileSystem(); // 1024 inodes, 8192 blocks
+const fs = new FileSystem();
 
 fs.create("example.txt");
 
@@ -40,17 +40,3 @@ fs.truncate("example.txt", 5);
 console.log("contents of fd1:\n", fs.read(fd, 100));
 
 fs.stat("example.txt");
-
-// fs.link("example.txt", "example_link.txt");
-// fs.ls();
-//
-// fs.unlink("example.txt");
-// fs.ls();
-//
-
-// • link name1 name2 – створити жорстке посилання з ім’ям name2 на файл, на який вказує
-// жорстке посилання з ім’ям name1.
-// • unlink name – знищити жорстке посилання з ім’ям name.
-//
-// • truncate name size – змінити розмір файлу, на який вказує жорстке посилання з ім’ям
-// name. Якщо розмір файлу збільшується, тоді неініціалізовані дані дорівнюють нулям.
