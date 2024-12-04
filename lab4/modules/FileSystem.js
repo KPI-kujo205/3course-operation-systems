@@ -196,7 +196,9 @@ export class FileSystem {
 	getInodeByName(path) {
 		if (path === "/" || path === ".") return this.currentDirectory.inode;
 
-		if (path.split("/").length > 1) {
+		console.log(path);
+
+		if (path.includes("/")) {
 			throw new Error(
 				"Directory creation is not supported in the current version",
 			);
@@ -254,13 +256,13 @@ export class FileSystem {
 		const inodeNumber =
 			this.currentDirectory.findInodeNumberByName(targetFileName);
 
-		console.log("inode number", inodeNumber);
-
-		if (inodeNumber) {
-			throw new Error("File name already exists");
+		if (!inodeNumber) {
+			throw new Error(
+				`Cannot make a hard link to a non-existing file named \`${targetFileName}\``,
+			);
 		}
 
-		this.currentDirectory.createDirectoryEntry(
+		this.currentDirectory.directoryEntries.set(
 			targetFileName,
 			sourceInode.inodeNumber,
 		);
@@ -281,18 +283,23 @@ export class FileSystem {
 		try {
 			targetInode = this.getInodeByName(name);
 		} catch (e) {
-			console.log(`Couldn't find an inode for ${name} file, skipping unlink`);
+			return console.log(
+				`Couldn't find an inode for ${name} file, skipping unlink`,
+			);
 		}
 
+		console.log(this.currentDirectory.directoryEntries);
 		this.currentDirectory.directoryEntries.delete(name);
+
+		console.log(this.currentDirectory.directoryEntries);
 
 		targetInode.linkCount--;
 		console.log(`Deleted hard link ${name}`);
 	}
 
 	/**
-	 * @param {string} name - file descriptor
-	 * @param {number} size - file descriptor
+	 * @param {string} name - file name
+	 * @param {number} size - new file size
 	 */
 	truncate(name, size) {
 		const inode = this.getInodeByName(name);
