@@ -13,6 +13,11 @@ export class Inode {
 	directLinks = [];
 
 	/**
+	 * @type {number[]}
+	 */
+	directLinkIndeces = [];
+
+	/**
 	 * @type {number}
 	 */
 	inodeNumber;
@@ -20,13 +25,15 @@ export class Inode {
 	/**
 	 * @param {'f'|'d'} type  - direct and indirect block links, stored in RAM
 	 * @param {ArrayBuffer[]} blocks  - direct and indirect block links, stored in RAM
-	 * @param {number} inodeNumber  - number of the inode
+	 * @param {number} _inodeNumber  - number of the inode
+	 * @param {number[]} directLinkIndeces  - number of the inode
 	 */
-	constructor(type, blocks, inodeNumber) {
+	constructor(type, blocks, _inodeNumber, directLinkIndeces) {
 		this.type = type; // 'f' for file, 'd' for directory
 		this.directLinks = blocks;
 		this.linkCount = 0;
-		this.inodeNumber = inodeNumber;
+		this.inodeNumber = _inodeNumber;
+		this.directLinkIndeces = directLinkIndeces;
 		this.createdAt = Date.now();
 		this.modifiedAt = Date.now();
 		this._size = 0;

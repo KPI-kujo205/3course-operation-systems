@@ -71,7 +71,11 @@ export class SimpleFile {
 
 	/**
 	 * Truncates the file to a specified length
-	 * @param {number} len - new length of the file
+	 * @param {number} index - direct link index
+	 * @param {ArrayBuffer} directLink - new direct link array buffer
 	 */
-	truncate(len) {}
+	addNewDirectLink(index, directLink) {
+		this.inode.directLinkIndeces.push(index);
+		this.inode.directLinks.push(directLink);
+	}
 }

@@ -37,6 +37,25 @@ export class FileSystem {
 		this.blocks[0] = []; // Root directory entries
 
 		this.currentDirectory = this.initializeRootDirectory();
+
+		setInterval(() => {
+			this.purgeClosedFilesWithoutLinks();
+		}, 500);
+	}
+
+	purgeClosedFilesWithoutLinks() {
+		this.currentDirectory.directoryEntries.forEach((entry, key) => {
+			const inode = this.inodes[entry];
+
+			if (this.openFileDescriptors.has(inode.inodeNumber)) return;
+
+			if (inode.linkCount === 0) {
+				for (const index of inode.directLinkIndeces) {
+					this.blocks[index] = null;
+					this.blockBitmap[index] = false;
+				}
+			}
+		});
 	}
 
 	/**
@@ -49,20 +68,31 @@ export class FileSystem {
 	}
 
 	/**
-	 * Allocates 5 blocks for an inode
-	 * @returns {ArrayBuffer[]}
+	 * Allocates 5 blocks for inode
+	 * @returns {{blocks: ArrayBuffer[], indeces: number[]}}
 	 */
 	allocateInodeBlocks() {
-		/** @type {ArrayBuffer[]} */
-		return [
+		const data = [
 			this.allocateBlock(),
 			this.allocateBlock(),
 			this.allocateBlock(),
 			this.allocateBlock(),
 			this.allocateBlock(),
 		];
+
+		const indeces = data.map((b) => b.index);
+		const blocks = data.map((b) => b.block);
+
+		return {
+			blocks,
+			indeces,
+		};
 	}
 
+	/**
+	 * Allocates new empty block
+	 * @returns {{index: number, block: ArrayBuffer}}
+	 */
 	allocateBlock() {
 		const freeBlockCandidate = this.blockBitmap.findIndex((b) => !b);
 
@@ -73,7 +103,7 @@ export class FileSystem {
 		this.blocks[freeBlockCandidate] = block;
 		this.blockBitmap[freeBlockCandidate] = true;
 
-		return block;
+		return { index: freeBlockCandidate, block };
 	}
 
 	/**
@@ -82,9 +112,10 @@ export class FileSystem {
 	 */
 	getFreeInode(type) {
 		const freeInodeIndex = this.inodeBitmap.findIndex((b) => !b);
-		const links = this.allocateInodeBlocks();
 
-		const inode = new Inode(type, links, freeInodeIndex);
+		const data = this.allocateInodeBlocks();
+
+		const inode = new Inode(type, data.blocks, freeInodeIndex, data.indeces);
 		this.inodes[freeInodeIndex] = inode;
 
 		this.inodeBitmap[freeInodeIndex] = true;
@@ -294,7 +325,9 @@ export class FileSystem {
 			const additionalBlocks = Math.ceil(additionalSize / chunkSize);
 
 			for (let i = 0; i < additionalBlocks; i++) {
-				file.inode.directLinks.push(this.allocateBlock());
+				const block = this.allocateBlock();
+				file.addNewDirectLink(block.index, block.block);
+				this.blockBitmap[block.index] = true;
 			}
 		}
 	}
