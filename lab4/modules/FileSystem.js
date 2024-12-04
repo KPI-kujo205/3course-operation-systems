@@ -106,6 +106,8 @@ export class FileSystem {
 
 		const fileInode = this.getFreeInode("f");
 
+		fileInode.linkCount++;
+
 		this.currentDirectory.createDirectoryEntry(name, fileInode.inodeNumber);
 	}
 
@@ -169,7 +171,12 @@ export class FileSystem {
 			);
 		}
 
-		const inodeNumber = this.currentDirectory.findEntryByName(path);
+		const inodeNumber = this.currentDirectory.findInodeNumberByName(path);
+
+		if (!inodeNumber) {
+			throw new Error("File not found");
+		}
+
 		return this.inodes[inodeNumber];
 	}
 
@@ -207,37 +214,50 @@ export class FileSystem {
 		console.log(`Seek for file descriptor ${fd} set to ${offset}`);
 	}
 
-	// link(name1, name2) {
-	// 	const sourceInodeNumber = this.getInodeByNane(name1);
-	// 	const targetDirInode = this.inodes[this.currentDirectoryInode];
-	// 	const targetDirEntries = this.blocks[targetDirInode.directLinks[0]];
-	//
-	// 	if (targetDirEntries.find((e) => e.name === name2))
-	// 		throw new Error("Target name already exists");
-	//
-	// 	targetDirEntries.push(new DirectoryEntry(name2, sourceInodeNumber));
-	// 	this.inodes[sourceInodeNumber].linkCount++;
-	// 	console.log(`Created hard link ${name2} -> ${name1}`);
-	// }
-	//
-	// unlink(name) {
-	// 	const dirInode = this.inodes[this.currentDirectoryInode];
-	// 	const dirEntries = this.blocks[dirInode.directLinks[0]];
-	// 	const entryIndex = dirEntries.findIndex((e) => e.name === name);
-	//
-	// 	if (entryIndex === -1) throw new Error("File not found");
-	//
-	// 	const inodeNumber = dirEntries[entryIndex].inodeNumber;
-	// 	dirEntries.splice(entryIndex, 1);
-	//
-	// 	this.inodes[inodeNumber].linkCount--;
-	// 	if (this.inodes[inodeNumber].linkCount === 0) {
-	// 		this.freeInode(inodeNumber);
-	// 	}
-	//
-	// 	console.log(`Unlinked ${name}`);
-	// }
-	//
+	/**
+	 *
+	 * @param {string} sourceFileName - source file link
+	 * @param {string} targetFileName - target file link
+	 */
+	link(sourceFileName, targetFileName) {
+		const sourceInode = this.getInodeByName(sourceFileName);
+
+		const inodeNumber =
+			this.currentDirectory.findInodeNumberByName(targetFileName);
+
+		if (inodeNumber) {
+			throw new Error("File name already exists");
+		}
+
+		this.currentDirectory.createDirectoryEntry(
+			targetFileName,
+			sourceInode.inodeNumber,
+		);
+
+		sourceInode.linkCount++;
+	}
+
+	/**
+	 * Destroys a hard link to a file
+	 * @param {string} name - file name of a hard link file
+	 */
+	unlink(name) {
+		/**
+		 * @type {Inode | undefined}
+		 */
+		let targetInode = undefined;
+
+		try {
+			targetInode = this.getInodeByName(name);
+		} catch (e) {
+			console.log(`Couldn't find an inode for ${name} file, skipping unlink`);
+		}
+
+		this.currentDirectory.directoryEntries.delete(name);
+
+		targetInode.linkCount--;
+		console.log(`Deleted hard link ${name}`);
+	}
 
 	/**
 	 * @param {string} name - file descriptor

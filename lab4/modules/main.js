@@ -27,11 +27,19 @@ console.log("contents of fd1:\n", fs.read(fd, 100));
 
 fs.stat("example.txt");
 
+fs.link("example.txt", "hard_link.txt");
+
+fs.ls();
+
+fs.unlink("hard_link.txt");
+
 fs.ls();
 
 fs.truncate("example.txt", 5);
 
 console.log("contents of fd1:\n", fs.read(fd, 100));
+
+fs.stat("example.txt");
 
 // fs.link("example.txt", "example_link.txt");
 // fs.ls();
@@ -39,8 +47,6 @@ console.log("contents of fd1:\n", fs.read(fd, 100));
 // fs.unlink("example.txt");
 // fs.ls();
 //
-// fs.truncate("example_link.txt", 5);
-// fs.stat("example_link.txt");
 
 // • link name1 name2 – створити жорстке посилання з ім’ям name2 на файл, на який вказує
 // жорстке посилання з ім’ям name1.

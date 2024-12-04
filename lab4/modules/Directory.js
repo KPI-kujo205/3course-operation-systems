@@ -101,15 +101,9 @@ export class Directory {
 	/**
 	 * Find an entry by name
 	 * @param {string} name
-	 * @returns {number}
+	 * @returns {number | undefined} Returns `undefined` if not inode found
 	 */
-	findEntryByName(name) {
-		const entry = this.directoryEntries.get(name);
-
-		if (!entry) {
-			throw new Error(`Entry with name \`${name}\` not found in directory`);
-		}
-
-		return entry;
+	findInodeNumberByName(name) {
+		return this.directoryEntries.get(name);
 	}
 }
