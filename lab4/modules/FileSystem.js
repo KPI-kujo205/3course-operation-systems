@@ -241,7 +241,6 @@ export class FileSystem {
 		if (!this.openFileDescriptors.has(fd))
 			throw new Error("Invalid file descriptor");
 		this.openFileDescriptors.get(fd).offset = offset;
-		console.log(`Seek for file descriptor ${fd} set to ${offset}`);
 	}
 
 	/**
@@ -254,6 +253,8 @@ export class FileSystem {
 
 		const inodeNumber =
 			this.currentDirectory.findInodeNumberByName(targetFileName);
+
+		console.log("inode number", inodeNumber);
 
 		if (inodeNumber) {
 			throw new Error("File name already exists");
