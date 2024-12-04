@@ -1,3 +1,5 @@
+import { Utils } from "./Utils.js";
+
 export class Inode {
 	/**
 	 * @type {ArrayBuffer[]}
@@ -21,5 +23,10 @@ export class Inode {
 		this.inodeNumber = inodeNumber;
 		this.createdAt = Date.now();
 		this.modifiedAt = Date.now();
+	}
+
+	get size() {
+		const res = Utils.readArrayBuffersWithoutTrailingZeros(this.directLinks);
+		return res.byteLength;
 	}
 }

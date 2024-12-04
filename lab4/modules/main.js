@@ -4,19 +4,23 @@ import { FileSystem } from "./FileSystem.js";
 const fs = new FileSystem(); // 1024 inodes, 8192 blocks
 
 fs.create("example.txt");
-fs.create("example1.txt");
-fs.create("example2.txt");
-fs.create("example3.txt");
 
 const fd = fs.open("example.txt");
 
-fs.write(fd, Buffer.from("Hello, World!"));
+fs.write(fd, Buffer.from("Hello world, this is my first ever file!!!"));
+
 fs.seek(fd, 0);
-const data = fs.read(fd, 10);
-console.log("contents of fd 1 ", data);
+
+console.log("contents of fd1:\n", fs.read(fd, 100));
+
+fs.seek(fd, 10);
+
+console.log("contents of fd1:\n", fs.read(fd, 100));
+
 fs.close(fd);
 
 fs.stat("example.txt");
+
 fs.ls();
 
 // fs.link("example.txt", "example_link.txt");

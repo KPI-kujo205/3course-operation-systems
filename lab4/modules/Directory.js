@@ -1,3 +1,4 @@
+import { Utils } from "./Utils.js";
 import { FSConfig } from "./fsConfig.js";
 
 export class Directory {
@@ -28,10 +29,9 @@ export class Directory {
 			const dataUnderInode = this.read();
 
 			console.log("dataUnderInode", dataUnderInode);
-
 			if (!dataUnderInode) {
 				this.directoryEntries = new Map();
-				this.directoryEntries.set(".", this.inode.inodeNumber);
+				this.createDirectoryEntry(".", this.inode.inodeNumber);
 			}
 		} catch (e) {}
 	}
@@ -49,21 +49,19 @@ export class Directory {
 	 * @returns {Map<string, number> | null}
 	 * */
 	read() {
-		let result = new Uint8Array();
 		const links = this.inode.directLinks;
 
-		for (const link of links) {
-			const view = new Uint8Array(link);
-			result = new Uint8Array([...result, ...view]);
-		}
+		const textDecoder = new TextDecoder();
 
-		const str = new TextDecoder().decode(result);
+		const result = Utils.readArrayBuffersWithoutTrailingZeros(links);
 
-		if (!str) {
+		const decodedStr = textDecoder.decode(result);
+
+		if (!decodedStr) {
 			return null;
 		}
 
-		return JSON.parse(str);
+		return JSON.parse(decodedStr);
 	}
 
 	/**
@@ -75,8 +73,6 @@ export class Directory {
 		if (this.directoryEntries.has(name)) {
 			throw new Error("File already exists");
 		}
-
-		console.log(`Creating directory entry for ${name} with inode ${inode}`);
 
 		this.directoryEntries.set(name, inode);
 		this.save();

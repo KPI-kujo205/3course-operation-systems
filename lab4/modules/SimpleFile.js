@@ -40,8 +40,6 @@ export class SimpleFile {
 	 * @param {Buffer} data
 	 */
 	write(data) {
-		console.log("writing data", data);
-
 		const links = this.inode.directLinks;
 		const chunkSize = FSConfig.BLOCK_SIZE;
 

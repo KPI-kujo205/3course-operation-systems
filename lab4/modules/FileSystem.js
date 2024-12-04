@@ -107,10 +107,6 @@ export class FileSystem {
 		const fileInode = this.getFreeInode("f");
 
 		this.currentDirectory.createDirectoryEntry(name, fileInode.inodeNumber);
-
-		console.log(
-			`File ${name} created with inode number ${fileInode.inodeNumber}`,
-		);
 	}
 
 	ls() {
@@ -134,8 +130,6 @@ export class FileSystem {
 		}
 
 		const file = new SimpleFile(inode);
-
-		console.log(`Reading ${size} bytes from file descriptor ${fd}`);
 
 		return file.read(size, fileDescriptor.offset);
 	}
@@ -198,7 +192,6 @@ export class FileSystem {
 		if (!this.openFileDescriptors.has(fd))
 			throw new Error("Invalid file descriptor");
 		this.openFileDescriptors.delete(fd);
-		console.log(`File descriptor ${fd} closed`);
 	}
 
 	seek(fd, offset) {
