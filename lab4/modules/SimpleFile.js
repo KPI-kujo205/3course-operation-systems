@@ -1,8 +1,9 @@
+import { Inode } from "./Inode.js";
 import { FSConfig } from "./fsConfig.js";
 
 export class SimpleFile {
 	/**
-	 * {@type Inode}
+	 * @type Inode
 	 * */
 	inode;
 
@@ -37,22 +38,60 @@ export class SimpleFile {
 
 	/**
 	 * Writes data to an array of direct links
-	 * @param {Buffer} data
+	 * @param {Buffer} data - data to write
+	 * @param {number} offset - offset to start writing from
 	 */
-	write(data) {
+	write(data, offset) {
 		const links = this.inode.directLinks;
 		const chunkSize = FSConfig.BLOCK_SIZE;
 
-		if (data.length > chunkSize * links.length) {
+		// Calculate the starting block and offset within the block
+		let blockIndex = Math.floor(offset / chunkSize);
+		let blockOffset = offset % chunkSize;
+
+		if (data.length + offset > chunkSize * links.length) {
 			throw new Error("File size exceeds maximum limit");
 		}
 
-		for (let i = 0; i < data.length; i += chunkSize) {
-			const chunk = data.slice(i, i + chunkSize);
-			const buffer = new ArrayBuffer(chunkSize);
-			const view = new Uint8Array(buffer);
-			view.set(chunk);
-			links[Math.floor(i / chunkSize)] = buffer;
+		for (let i = 0; i < data.length; i++) {
+			if (blockOffset === chunkSize) {
+				blockIndex++;
+				blockOffset = 0;
+			}
+
+			if (!links[blockIndex]) {
+				links[blockIndex] = new ArrayBuffer(chunkSize);
+			}
+
+			const view = new Uint8Array(links[blockIndex]);
+			view[blockOffset] = data[i];
+			blockOffset++;
+		}
+	}
+
+	/**
+	 * Truncates the file to a specified length
+	 * @param {number} len - new length of the file
+	 */
+	truncate(len) {
+		this.inode._size = len;
+
+		if (len < this.inode.actualSize) {
+			const links = this.inode.directLinks;
+			const chunkSize = FSConfig.BLOCK_SIZE;
+			const blockIndex = Math.floor(len / chunkSize);
+			const blockOffset = len % chunkSize;
+
+			links.length = blockIndex + 1;
+
+			if (blockOffset === 0) {
+				return;
+			}
+
+			const lastBlock = new Uint8Array(links[blockIndex]);
+			const newLastBlock = lastBlock.slice(0, blockOffset);
+
+			links[blockIndex] = newLastBlock.buffer;
 		}
 	}
 }

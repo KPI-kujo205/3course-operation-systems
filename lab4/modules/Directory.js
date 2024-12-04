@@ -28,7 +28,6 @@ export class Directory {
 		try {
 			const dataUnderInode = this.read();
 
-			console.log("dataUnderInode", dataUnderInode);
 			if (!dataUnderInode) {
 				this.directoryEntries = new Map();
 				this.createDirectoryEntry(".", this.inode.inodeNumber);
@@ -53,7 +52,7 @@ export class Directory {
 
 		const textDecoder = new TextDecoder();
 
-		const result = Utils.readArrayBuffersWithoutTrailingZeros(links);
+		const result = Utils.readArrayBuffers(links);
 
 		const decodedStr = textDecoder.decode(result);
 

@@ -2,14 +2,19 @@
 export class Utils {
 	/**
 	 * @param {ArrayBuffer[]} links
+	 * @param {{includeTrailingZeros:boolean}} config
 	 * @returns {Uint8Array}
 	 */
-	static readArrayBuffersWithoutTrailingZeros(links) {
+	static readArrayBuffers(links, config = { includeTrailingZeros: false }) {
 		let result = new Uint8Array();
 
 		for (const link of links) {
 			const view = new Uint8Array(link);
 			result = new Uint8Array([...result, ...view]);
+		}
+
+		if (config.includeTrailingZeros) {
+			return result;
 		}
 
 		let firstNonZeroIndex = 0;

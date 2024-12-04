@@ -134,6 +134,9 @@ export class FileSystem {
 		return file.read(size, fileDescriptor.offset);
 	}
 
+	// • write fd size – записати size байт даних у відкритий файл, до значення зміщення
+	// додається size.
+
 	/**
 	 *
 	 * @param fd {number} - file descriptor
@@ -143,14 +146,15 @@ export class FileSystem {
 		if (!this.openFileDescriptors.has(fd))
 			throw new Error("Invalid file descriptor");
 
-		const inode = this.inodes[this.openFileDescriptors.get(fd).inodeNumber];
+		const fileDescriptor = this.openFileDescriptors.get(fd);
+		const inode = this.inodes[fileDescriptor.inodeNumber];
 
 		if (inode.type === "d") {
-			throw new Error("Cannot open directory for reading");
+			throw new Error("Cannot open directory for writing");
 		}
 
 		const file = new SimpleFile(inode);
-		file.write(data);
+		file.write(data, fileDescriptor.offset);
 	}
 
 	/**
@@ -165,23 +169,25 @@ export class FileSystem {
 			);
 		}
 
-		return this.currentDirectory.findEntryByName(path);
+		const inodeNumber = this.currentDirectory.findEntryByName(path);
+		return this.inodes[inodeNumber];
 	}
 
 	stat(name) {
-		const inodeNumber = this.getInodeByName(name);
-		const inode = this.inodes[inodeNumber];
-		console.log(`File: ${name}`);
+		const inode = this.getInodeByName(name);
+
+		console.log(`\nFile ${name} stats:`);
 		console.log(`Type: ${inode.type === "f" ? "File" : "Directory"}`);
 		console.log(`Size: ${inode.size} bytes`);
-		console.log(`Inode: ${inodeNumber}`);
+		console.log(`Inode: ${inode.inodeNumber}`);
 		console.log(`Links: ${inode.linkCount}`);
 		console.log(`Created: ${new Date(inode.createdAt)}`);
-		console.log(`Modified: ${new Date(inode.modifiedAt)}`);
+		console.log(`Modified: ${new Date(inode.modifiedAt)}\n`);
 	}
 
 	open(name) {
-		const inodeNumber = this.getInodeByName(name);
+		const inode = this.getInodeByName(name);
+		const inodeNumber = inode.inodeNumber;
 		const fd = this.nextFd++;
 		this.openFileDescriptors.set(fd, { inodeNumber, offset: 0 });
 		console.log(`File ${name} opened with descriptor ${fd}`);
@@ -232,62 +238,18 @@ export class FileSystem {
 	// 	console.log(`Unlinked ${name}`);
 	// }
 	//
-	// truncate(name, size) {
-	// 	const inodeNumber = this.getInodeByPath(name);
-	// 	const inode = this.inodes[inodeNumber];
-	//
-	// 	if (size < inode.size) {
-	// 		const newLastBlockIndex = Math.floor((size - 1) / BLOCK_SIZE);
-	// 		for (let i = newLastBlockIndex + 1; i < inode.directLinks.length; i++) {
-	// 			if (inode.directLinks[i]) {
-	// 				this.freeBlock(inode.directLinks[i]);
-	// 				inode.directLinks[i] = 0;
-	// 			}
-	// 		}
-	// 		if (inode.indirectLink) {
-	// 			const indirectBlock = this.blocks[inode.indirectLink];
-	// 			for (
-	// 				let i = Math.max(0, newLastBlockIndex - 2);
-	// 				i < BLOCK_SIZE / 4;
-	// 				i++
-	// 			) {
-	// 				const blockNumber = indirectBlock.readUInt32LE(i * 4);
-	// 				if (blockNumber) {
-	// 					this.freeBlock(blockNumber);
-	// 					indirectBlock.writeUInt32LE(0, i * 4);
-	// 				}
-	// 			}
-	// 			if (newLastBlockIndex < 3) {
-	// 				this.freeBlock(inode.indirectLink);
-	// 				inode.indirectLink = 0;
-	// 			}
-	// 		}
-	// 	} else if (size > inode.size) {
-	// 		const lastBlockIndex = Math.floor((size - 1) / BLOCK_SIZE);
-	// 		for (
-	// 			let i = Math.floor(inode.size / BLOCK_SIZE) + 1;
-	// 			i <= lastBlockIndex;
-	// 			i++
-	// 		) {
-	// 			if (i < 3) {
-	// 				if (!inode.directLinks[i]) {
-	// 					inode.directLinks[i] = this.allocateBlock();
-	// 				}
-	// 			} else {
-	// 				if (!inode.indirectLink) {
-	// 					inode.indirectLink = this.allocateBlock();
-	// 				}
-	// 				const indirectBlock = this.blocks[inode.indirectLink];
-	// 				if (!indirectBlock.readUInt32LE((i - 3) * 4)) {
-	// 					const newBlockNumber = this.allocateBlock();
-	// 					indirectBlock.writeUInt32LE(newBlockNumber, (i - 3) * 4);
-	// 				}
-	// 			}
-	// 		}
-	// 	}
-	//
-	// 	inode.size = size;
-	// 	inode.modifiedAt = Date.now();
-	// 	console.log(`Truncated ${name} to ${size} bytes`);
-	// }
+
+	/**
+	 * @param {string} name - file descriptor
+	 * @param {number} size - file descriptor
+	 */
+	truncate(name, size) {
+		const inode = this.getInodeByName(name);
+
+		if (!inode) throw new Error("File not found");
+
+		const file = new SimpleFile(inode);
+
+		file.truncate(size);
+	}
 }
