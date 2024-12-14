@@ -1,0 +1,6 @@
+export const FSConfig = {
+	BLOCK_SIZE: 4096, // 4 KB
+	MAX_FILENAME_LENGTH: 255,
+	MAX_BLOCKS: 8192,
+	MAX_INODES: 1024,
+};
