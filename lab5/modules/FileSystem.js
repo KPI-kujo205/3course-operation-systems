@@ -2,6 +2,7 @@ import {Directory} from "./Directory.js";
 import {Inode, InodeType} from "./Inode.js";
 import {SimpleFile} from "./SimpleFile.js";
 import {FSConfig} from "./fsConfig.js";
+import {Utils} from "./Utils.js";
 
 export class FileSystem {
   /** @type Directory */
@@ -348,10 +349,56 @@ export class FileSystem {
   
   
   /**
+   * Removes a file
+   * @param {string} path - path to be resolved
+   */
+  rm(path) {
+    const sanitizePath = Utils.sanitizePath(path);
+    const components = sanitizePath.split('/');
+    const fileName = components.pop();
+    
+    const dir = this.resolvePath(components.join('/'));
+    const fileInodeNumber = dir.directoryEntries.get(fileName);
+    
+    if (!fileInodeNumber) throw new Error(`File \`${path}\` not found while trying to delete a file`);
+    
+    const fileInode = this.inodes[fileInodeNumber];
+    
+    if (fileInode.type !== InodeType.FILE) {
+      throw new Error(`\`${path}\` is not a file`);
+    }
+    
+    // If file has more than 1 link, just remove the directory entry
+    if (fileInode.linkCount > 1) {
+      fileInode.linkCount--;
+      dir.directoryEntries.delete(fileName);
+      dir.save();
+      console.log(`\nHard link \`${path}\` removed successfully`);
+      return
+    }
+    
+    dir.directoryEntries.delete(fileName);
+    dir.save();
+    
+    fileInode.directLinks.forEach((_, index) => {
+      this.blocks[fileInode.directLinkIndeces[index]] = null;
+      this.blockBitmap[fileInode.directLinkIndeces[index]] = false;
+    });
+    
+    this.inodes[fileInode.inodeNumber] = null;
+    this.inodeBitmap[fileInode.inodeNumber] = false;
+    
+    console.log(`\nFile \`${path}\` removed successfully`);
+  }
+  
+  /**
+   * Resolves a directory path, don't use for files
    * @param {string} path - path to be resolved
    */
   resolvePath(path) {
-    const components = path.split('/');
+    const sanitizedPath = Utils.sanitizePath(path);
+    const components = sanitizedPath.split('/');
+    
     let current = this.currentDirectory;
     let symlinkCount = 0;
     const maxSymlinkCount = 10; // Prevent infinite loops
@@ -418,12 +465,40 @@ export class FileSystem {
     
     const dirInode = this.getFreeInode(InodeType.DIRECTORY);
     
-    console.log('parentDirectory', parentDirectory)
-    
     new Directory(dirInode, dirName, parentDirectory.inode.inodeNumber);
     
     parentDirectory.createDirectoryEntry(dirName, dirInode.inodeNumber);
   }
+  
+  rmdir(path) {
+    const directory = this.resolvePath(path);
+    
+    if (!directory.isEmpty()) {
+      throw new Error(`Directory \`${path}\` is not empty, first remove all the files`);
+    }
+    
+    if (path === '/') {
+      throw new Error('Cannot remove root directory as it would render the filesystem unusable');
+    }
+    
+    const parentDirectory = this.resolvePath('..');
+    const dirName = Utils.getLastPathSegment(path);
+    
+    parentDirectory.directoryEntries.delete(dirName);
+    parentDirectory.save();
+    
+    const inode = directory.inode;
+    inode.directLinks.forEach((_, index) => {
+      this.blocks[inode.directLinkIndeces[index]] = null;
+      this.blockBitmap[inode.directLinkIndeces[index]] = false;
+    });
+    
+    this.inodes[inode.inodeNumber] = null;
+    this.inodeBitmap[inode.inodeNumber] = false;
+    
+    console.log(`\nDirectory \`${path}\` removed successfully`);
+  }
+  
   
   cd(path) {
     this.currentDirectory = this.resolvePath(path);
