@@ -57,6 +57,19 @@ export class Directory {
   }
   
   /**
+   * Iterates over directory entries
+   * and checks if there are no `..` and `.` entries
+   */
+  isEmpty() {
+    for (const [name] of this.directoryEntries) {
+      if (name !== '.' && name !== '..') {
+        return false;
+      }
+    }
+    return true;
+  }
+  
+  /**
    * Reads data from an array of direct links
    * @returns {Directory}
    * */
