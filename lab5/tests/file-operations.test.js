@@ -109,6 +109,14 @@ describe("file operations in many directories", () => {
 		expect(fs.currentDirectory.directoryEntries.get("hard_link")).toBeDefined();
 	});
 
+	test("doesnt create a hard link to a directory", () => {
+		fs.cd("/");
+		fs.mkdir("hard_link_dir_2");
+		fs.mkdir("hard_link_dir_3");
+
+		expect(() => fs.link("hard_link_dir_3", "hard_link_dir_2")).toThrowError();
+	});
+
 	test("removes a hard link", () => {
 		fs.unlink("hard_link");
 

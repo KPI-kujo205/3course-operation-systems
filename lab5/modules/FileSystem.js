@@ -266,6 +266,9 @@ export class FileSystem {
 	link(sourceFileName, targetFileName) {
 		const sourceInode = this.getInodeByName(sourceFileName);
 
+		if (sourceInode.type === InodeType.DIRECTORY)
+			throw new Error("Cannot create a hard link to a directory");
+
 		const inodeNumber =
 			this.currentDirectory.findInodeNumberByName(targetFileName);
 
