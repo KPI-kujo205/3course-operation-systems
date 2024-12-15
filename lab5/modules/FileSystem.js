@@ -1,342 +1,432 @@
-import { Directory } from "./Directory.js";
-import { Inode } from "./Inode.js";
-import { SimpleFile } from "./SimpleFile.js";
-import { FSConfig } from "./fsConfig.js";
+import {Directory} from "./Directory.js";
+import {Inode, InodeType} from "./Inode.js";
+import {SimpleFile} from "./SimpleFile.js";
+import {FSConfig} from "./fsConfig.js";
 
 export class FileSystem {
-	/**
-	 * @type Directory
-	 */
-	currentDirectory;
-
-	/**
-	 * @type {Map<number, {inodeNumber: number, offset: number}>}
-	 */
-	openFileDescriptors;
-
-	/**
-	 * @type {Inode[]}
-	 */
-	inodes;
-
-	/**
-	 * @type {boolean[]}
-	 */
-	blockBitmap;
-
-	constructor() {
-		this.inodeBitmap = new Array(FSConfig.MAX_INODES).fill(false);
-		this.inodes = new Array(FSConfig.MAX_INODES).fill(null);
-
-		this.blockBitmap = new Array(FSConfig.MAX_BLOCKS).fill(false);
-		this.blocks = new Array(FSConfig.MAX_BLOCKS).fill(null);
-
-		this.openFileDescriptors = new Map();
-		this.nextFd = 0;
-
-		this.blocks[0] = []; // Root directory entries
-
-		this.currentDirectory = this.initializeRootDirectory();
-
-		setInterval(() => {
-			this.purgeClosedFilesWithoutLinks();
-		}, 500);
-	}
-
-	purgeClosedFilesWithoutLinks() {
-		this.currentDirectory.directoryEntries.forEach((entry, key) => {
-			const inode = this.inodes[entry];
-
-			if (this.openFileDescriptors.has(inode.inodeNumber)) return;
-
-			if (inode.linkCount === 0) {
-				for (const index of inode.directLinkIndeces) {
-					this.blocks[index] = null;
-					this.blockBitmap[index] = false;
-				}
-			}
-		});
-	}
-
-	/**
-	 * Initializes the root directory, 1st inode in the system
-	 * @return {Directory} - root directory
-	 */
-	initializeRootDirectory() {
-		this.inodes[0] = this.getFreeInode("d");
-		return new Directory(this.inodes[0], "/");
-	}
-
-	/**
-	 * Allocates 5 blocks for inode
-	 * @returns {{blocks: ArrayBuffer[], indeces: number[]}}
-	 */
-	allocateInodeBlocks() {
-		const data = [
-			this.allocateBlock(),
-			this.allocateBlock(),
-			this.allocateBlock(),
-			this.allocateBlock(),
-			this.allocateBlock(),
-		];
-
-		const indeces = data.map((b) => b.index);
-		const blocks = data.map((b) => b.block);
-
-		return {
-			blocks,
-			indeces,
-		};
-	}
-
-	/**
-	 * Allocates new empty block
-	 * @returns {{index: number, block: ArrayBuffer}}
-	 */
-	allocateBlock() {
-		const freeBlockCandidate = this.blockBitmap.findIndex((b) => !b);
-
-		if (freeBlockCandidate === -1)
-			throw new Error("No free blocks left in the system, free up some files");
-
-		const block = new ArrayBuffer(FSConfig.BLOCK_SIZE);
-		this.blocks[freeBlockCandidate] = block;
-		this.blockBitmap[freeBlockCandidate] = true;
-
-		return { index: freeBlockCandidate, block };
-	}
-
-	/**
-	 * type {@type 'f' | 'd'} - 'f' for file, 'd' for directory
-	 * @return {Inode} - newly created Inode
-	 */
-	getFreeInode(type) {
-		const freeInodeIndex = this.inodeBitmap.findIndex((b) => !b);
-
-		const data = this.allocateInodeBlocks();
-
-		const inode = new Inode(type, data.blocks, freeInodeIndex, data.indeces);
-		this.inodes[freeInodeIndex] = inode;
-
-		this.inodeBitmap[freeInodeIndex] = true;
-
-		return inode;
-	}
-
-	create(name) {
-		if (name.includes("/")) {
-			throw new Error(
-				"You cannot use `/` in the filename, directory creation is not supported in the current version",
-			);
-		}
-
-		if (name.length > FSConfig.MAX_FILENAME_LENGTH)
-			throw new Error(
-				`Filename \`${name}\` exceeds \`${FSConfig.MAX_FILENAME_LENGTH}\` chars`,
-			);
-
-		const fileInode = this.getFreeInode("f");
-
-		fileInode.linkCount++;
-
-		this.currentDirectory.createDirectoryEntry(name, fileInode.inodeNumber);
-	}
-
-	ls() {
-		this.currentDirectory.ls();
-	}
-
-	/**
-	 * @param {number} fd
-	 * @param {number} size
-	 */
-	read(fd, size) {
-		if (!this.openFileDescriptors.has(fd))
-			throw new Error("Invalid file descriptor");
-
-		const fileDescriptor = this.openFileDescriptors.get(fd);
-
-		const inode = this.inodes[fileDescriptor.inodeNumber];
-
-		if (inode.type === "d") {
-			throw new Error("Cannot open directory for reading");
-		}
-
-		const file = new SimpleFile(inode);
-
-		return file.read(size, fileDescriptor.offset);
-	}
-
-	// • write fd size – записати size байт даних у відкритий файл, до значення зміщення
-	// додається size.
-
-	/**
-	 *
-	 * @param fd {number} - file descriptor
-	 * @param data {Buffer} - data to write
-	 */
-	write(fd, data) {
-		if (!this.openFileDescriptors.has(fd))
-			throw new Error("Invalid file descriptor");
-
-		const fileDescriptor = this.openFileDescriptors.get(fd);
-		const inode = this.inodes[fileDescriptor.inodeNumber];
-
-		if (inode.type === "d") {
-			throw new Error("Cannot open directory for writing");
-		}
-
-		const file = new SimpleFile(inode);
-		file.write(data, fileDescriptor.offset);
-	}
-
-	/**
-	 * @param {string} path
-	 */
-	getInodeByName(path) {
-		if (path === "/" || path === ".") return this.currentDirectory.inode;
-
-		console.log(path);
-
-		if (path.includes("/")) {
-			throw new Error(
-				"Directory creation is not supported in the current version",
-			);
-		}
-
-		const inodeNumber = this.currentDirectory.findInodeNumberByName(path);
-
-		if (!inodeNumber) {
-			throw new Error("File not found");
-		}
-		return this.inodes[inodeNumber];
-	}
-
-	stat(name) {
-		const inode = this.getInodeByName(name);
-
-		console.log(`\nFile ${name} stats:`);
-		console.log(`Type: ${inode.type === "f" ? "File" : "Directory"}`);
-		console.log(`Size: ${inode.size} bytes`);
-		console.log(`Inode: ${inode.inodeNumber}`);
-		console.log(`Links: ${inode.linkCount}`);
-		console.log(`Created: ${new Date(inode.createdAt)}`);
-		console.log(`Modified: ${new Date(inode.modifiedAt)}\n`);
-	}
-
-	open(name) {
-		const inode = this.getInodeByName(name);
-		const inodeNumber = inode.inodeNumber;
-		const fd = this.nextFd++;
-		this.openFileDescriptors.set(fd, { inodeNumber, offset: 0 });
-		console.log(`File ${name} opened with descriptor ${fd}`);
-		return fd;
-	}
-
-	close(fd) {
-		if (!this.openFileDescriptors.has(fd))
-			throw new Error("Invalid file descriptor");
-		this.openFileDescriptors.delete(fd);
-	}
-
-	seek(fd, offset) {
-		if (!this.openFileDescriptors.has(fd))
-			throw new Error("Invalid file descriptor");
-		this.openFileDescriptors.get(fd).offset = offset;
-	}
-
-	/**
-	 *
-	 * @param {string} sourceFileName - source file link
-	 * @param {string} targetFileName - target file link
-	 */
-	link(sourceFileName, targetFileName) {
-		const sourceInode = this.getInodeByName(sourceFileName);
-
-		const inodeNumber =
-			this.currentDirectory.findInodeNumberByName(targetFileName);
-
-		if (!inodeNumber) {
-			throw new Error(
-				`Cannot make a hard link to a non-existing file named \`${targetFileName}\``,
-			);
-		}
-
-		this.currentDirectory.directoryEntries.set(
-			targetFileName,
-			sourceInode.inodeNumber,
-		);
-
-		sourceInode.linkCount++;
-	}
-
-	/**
-	 * Destroys a hard link to a file
-	 * @param {string} name - file name of a hard link file
-	 */
-	unlink(name) {
-		/**
-		 * @type {Inode | undefined}
-		 */
-		let targetInode = undefined;
-
-		try {
-			targetInode = this.getInodeByName(name);
-		} catch (e) {
-			return console.log(
-				`Couldn't find an inode for ${name} file, skipping unlink`,
-			);
-		}
-
-		console.log(this.currentDirectory.directoryEntries);
-		this.currentDirectory.directoryEntries.delete(name);
-
-		console.log(this.currentDirectory.directoryEntries);
-
-		targetInode.linkCount--;
-		console.log(`Deleted hard link ${name}`);
-	}
-
-	/**
-	 * @param {string} name - file name
-	 * @param {number} size - new file size
-	 */
-	truncate(name, size) {
-		const inode = this.getInodeByName(name);
-
-		if (!inode) throw new Error("File not found");
-
-		const file = new SimpleFile(inode);
-
-		file.inode._size = size;
-
-		if (size < file.inode.actualSize) {
-			// reduce the size
-			const links = file.inode.directLinks;
-			const chunkSize = FSConfig.BLOCK_SIZE;
-			const blockIndex = Math.floor(size / chunkSize);
-			const blockOffset = size % chunkSize;
-
-			links.length = blockIndex + 1;
-
-			if (blockOffset === 0) {
-				return;
-			}
-
-			const lastBlock = new Uint8Array(links[blockIndex]);
-			const newLastBlock = lastBlock.slice(0, blockOffset);
-
-			links[blockIndex] = newLastBlock.buffer;
-		} else if (size > file.inode.actualSize) {
-			const chunkSize = FSConfig.BLOCK_SIZE;
-			const additionalSize = size - file.inode.actualSize;
-			const additionalBlocks = Math.ceil(additionalSize / chunkSize);
-
-			for (let i = 0; i < additionalBlocks; i++) {
-				const block = this.allocateBlock();
-				file.addNewDirectLink(block.index, block.block);
-				this.blockBitmap[block.index] = true;
-			}
-		}
-	}
+  /** @type Directory */
+  currentDirectory;
+  
+  /**
+   * @type {Map<number, {inodeNumber: number, offset: number}>}
+   */
+  openFileDescriptors;
+  
+  /**
+   * @type {Inode[]}
+   */
+  inodes;
+  
+  /**
+   * @type {boolean[]}
+   */
+  blockBitmap;
+  
+  constructor() {
+    this.inodeBitmap = new Array(FSConfig.MAX_INODES).fill(false);
+    this.inodes = new Array(FSConfig.MAX_INODES).fill(null);
+    
+    this.blockBitmap = new Array(FSConfig.MAX_BLOCKS).fill(false);
+    this.blocks = new Array(FSConfig.MAX_BLOCKS).fill(null);
+    
+    this.openFileDescriptors = new Map();
+    this.nextFd = 0;
+    
+    this.blocks[0] = []; // Root directory entries
+    
+    this.currentDirectory = this.initializeRootDirectory();
+    
+    setInterval(() => {
+      this.purgeClosedFilesWithoutLinks();
+    }, 500);
+  }
+  
+  purgeClosedFilesWithoutLinks() {
+    this.currentDirectory.directoryEntries.forEach((entry, key) => {
+      const inode = this.inodes[entry];
+      
+      if (this.openFileDescriptors.has(inode.inodeNumber)) return;
+      
+      if (inode.linkCount === 0) {
+        for (const index of inode.directLinkIndeces) {
+          this.blocks[index] = null;
+          this.blockBitmap[index] = false;
+        }
+      }
+    });
+  }
+  
+  /**
+   * Initializes the root directory, 1st inode in the system
+   * @return {Directory} - root directory
+   */
+  initializeRootDirectory() {
+    this.inodes[0] = this.getFreeInode(InodeType.DIRECTORY);
+    return new Directory(this.inodes[0], "/");
+  }
+  
+  /**
+   * Allocates 5 blocks for inode
+   * @returns {{blocks: ArrayBuffer[], indeces: number[]}}
+   */
+  allocateInodeBlocks() {
+    const data = [
+      this.allocateBlock(),
+      this.allocateBlock(),
+      this.allocateBlock(),
+      this.allocateBlock(),
+      this.allocateBlock(),
+    ];
+    
+    const indeces = data.map((b) => b.index);
+    const blocks = data.map((b) => b.block);
+    
+    return {
+      blocks,
+      indeces,
+    };
+  }
+  
+  /**
+   * Allocates new empty block
+   * @returns {{index: number, block: ArrayBuffer}}
+   */
+  allocateBlock() {
+    const freeBlockCandidate = this.blockBitmap.findIndex((b) => !b);
+    
+    if (freeBlockCandidate === -1)
+      throw new Error("No free blocks left in the system, free up some files");
+    
+    const block = new ArrayBuffer(FSConfig.BLOCK_SIZE);
+    this.blocks[freeBlockCandidate] = block;
+    this.blockBitmap[freeBlockCandidate] = true;
+    
+    return {index: freeBlockCandidate, block};
+  }
+  
+  /**
+   * type {@type } - 'f' for file, 'd' for directory
+   * @return {Inode} - newly created Inode
+   */
+  getFreeInode(type) {
+    const freeInodeIndex = this.inodeBitmap.findIndex((b) => !b);
+    
+    const data = this.allocateInodeBlocks();
+    
+    const inode = new Inode(type, data.blocks, freeInodeIndex, data.indeces);
+    this.inodes[freeInodeIndex] = inode;
+    
+    this.inodeBitmap[freeInodeIndex] = true;
+    
+    return inode;
+  }
+  
+  create(name) {
+    if (name.includes("/")) {
+      throw new Error(
+        "You cannot use `/` in the filename, directory creation is not supported in the current version",
+      );
+    }
+    
+    if (name.length > FSConfig.MAX_FILENAME_LENGTH)
+      throw new Error(
+        `Filename \`${name}\` exceeds \`${FSConfig.MAX_FILENAME_LENGTH}\` chars`,
+      );
+    
+    const fileInode = this.getFreeInode(InodeType.FILE);
+    
+    fileInode.linkCount++;
+    
+    this.currentDirectory.createDirectoryEntry(name, fileInode.inodeNumber);
+  }
+  
+  ls() {
+    const padRight = (str, length) => str.padEnd(length, ' ');
+    const padLeft = (str, length) => str.padStart(length, ' ');
+    
+    console.log(`\nContents of \`${this.currentDirectory.name}\` directory:`);
+    console.log(`${padRight("Name", 20)}\t${padRight("Type", 5)}\t${padRight("Inode", 5)}`);
+    
+    this.currentDirectory.directoryEntries.forEach((inodeNumber, name) => {
+      const inode = this.inodes[inodeNumber];
+      const type = inode.type;
+      console.log(`${padRight(name, 20)}\t${padRight(type, 5)}\t${padLeft(inode.inodeNumber.toString(), 5)}`);
+    });
+  }
+  
+  /**
+   * @param {number} fd
+   * @param {number} size
+   */
+  read(fd, size) {
+    if (!this.openFileDescriptors.has(fd))
+      throw new Error("Invalid file descriptor");
+    
+    const fileDescriptor = this.openFileDescriptors.get(fd);
+    
+    const inode = this.inodes[fileDescriptor.inodeNumber];
+    
+    if (inode.type === "d") {
+      throw new Error("Cannot open directory for reading");
+    }
+    
+    const file = new SimpleFile(inode);
+    
+    return file.read(size, fileDescriptor.offset);
+  }
+  
+  
+  /**
+   *
+   * @param fd {number} - file descriptor
+   * @param data {Buffer} - data to write
+   */
+  write(fd, data) {
+    if (!this.openFileDescriptors.has(fd))
+      throw new Error("Invalid file descriptor");
+    
+    const fileDescriptor = this.openFileDescriptors.get(fd);
+    const inode = this.inodes[fileDescriptor.inodeNumber];
+    
+    if (inode.type === "d") {
+      throw new Error("Cannot open directory for writing");
+    }
+    
+    const file = new SimpleFile(inode);
+    file.write(data, fileDescriptor.offset);
+  }
+  
+  /**
+   * @param {string} path
+   */
+  getInodeByName(path) {
+    if (path === "/" || path === ".") return this.currentDirectory.inode;
+    
+    console.log(path);
+    
+    if (path.includes("/")) {
+      throw new Error(
+        "Directory creation is not supported in the current version",
+      );
+    }
+    
+    const inodeNumber = this.currentDirectory.findInodeNumberByName(path);
+    
+    if (!inodeNumber) {
+      throw new Error("File not found");
+    }
+    return this.inodes[inodeNumber];
+  }
+  
+  stat(name) {
+    const inode = this.getInodeByName(name);
+    
+    console.log(`\nFile ${name} stats:`);
+    console.log(`Type: ${inode.type === "f" ? "File" : "Directory"}`);
+    console.log(`Size: ${inode.size} bytes`);
+    console.log(`Inode: ${inode.inodeNumber}`);
+    console.log(`Links: ${inode.linkCount}`);
+    console.log(`Created: ${new Date(inode.createdAt)}`);
+    console.log(`Modified: ${new Date(inode.modifiedAt)}\n`);
+  }
+  
+  open(name) {
+    const inode = this.getInodeByName(name);
+    const inodeNumber = inode.inodeNumber;
+    const fd = this.nextFd++;
+    this.openFileDescriptors.set(fd, {inodeNumber, offset: 0});
+    console.log(`File ${name} opened with descriptor ${fd}`);
+    return fd;
+  }
+  
+  close(fd) {
+    if (!this.openFileDescriptors.has(fd))
+      throw new Error("Invalid file descriptor");
+    this.openFileDescriptors.delete(fd);
+  }
+  
+  seek(fd, offset) {
+    if (!this.openFileDescriptors.has(fd))
+      throw new Error("Invalid file descriptor");
+    this.openFileDescriptors.get(fd).offset = offset;
+  }
+  
+  /**
+   *
+   * @param {string} sourceFileName - source file link
+   * @param {string} targetFileName - target file link
+   */
+  link(sourceFileName, targetFileName) {
+    const sourceInode = this.getInodeByName(sourceFileName);
+    
+    const inodeNumber =
+      this.currentDirectory.findInodeNumberByName(targetFileName);
+    
+    if (!inodeNumber) {
+      throw new Error(
+        `Cannot make a hard link to a non-existing file named \`${targetFileName}\``,
+      );
+    }
+    
+    this.currentDirectory.directoryEntries.set(
+      targetFileName,
+      sourceInode.inodeNumber,
+    );
+    
+    sourceInode.linkCount++;
+  }
+  
+  /**
+   * Destroys a hard link to a file
+   * @param {string} name - file name of a hard link file
+   */
+  unlink(name) {
+    /**
+     * @type {Inode | undefined}
+     */
+    let targetInode = undefined;
+    
+    try {
+      targetInode = this.getInodeByName(name);
+    } catch (e) {
+      return console.log(
+        `Couldn't find an inode for ${name} file, skipping unlink`,
+      );
+    }
+    
+    console.log(this.currentDirectory.directoryEntries);
+    this.currentDirectory.directoryEntries.delete(name);
+    
+    console.log(this.currentDirectory.directoryEntries);
+    
+    targetInode.linkCount--;
+    console.log(`Deleted hard link ${name}`);
+  }
+  
+  /**
+   * @param {string} name - file name
+   * @param {number} size - new file size
+   */
+  truncate(name, size) {
+    const inode = this.getInodeByName(name);
+    
+    if (!inode) throw new Error("File not found");
+    
+    const file = new SimpleFile(inode);
+    
+    file.inode._size = size;
+    
+    if (size < file.inode.actualSize) {
+      // reduce the size
+      const links = file.inode.directLinks;
+      const chunkSize = FSConfig.BLOCK_SIZE;
+      const blockIndex = Math.floor(size / chunkSize);
+      const blockOffset = size % chunkSize;
+      
+      links.length = blockIndex + 1;
+      
+      if (blockOffset === 0) {
+        return;
+      }
+      
+      const lastBlock = new Uint8Array(links[blockIndex]);
+      const newLastBlock = lastBlock.slice(0, blockOffset);
+      
+      links[blockIndex] = newLastBlock.buffer;
+    } else if (size > file.inode.actualSize) {
+      const chunkSize = FSConfig.BLOCK_SIZE;
+      const additionalSize = size - file.inode.actualSize;
+      const additionalBlocks = Math.ceil(additionalSize / chunkSize);
+      
+      for (let i = 0; i < additionalBlocks; i++) {
+        const block = this.allocateBlock();
+        file.addNewDirectLink(block.index, block.block);
+        this.blockBitmap[block.index] = true;
+      }
+    }
+  }
+  
+  
+  /**
+   * @param {string} path - path to be resolved
+   */
+  resolvePath(path) {
+    const components = path.split('/');
+    let current = this.currentDirectory;
+    let symlinkCount = 0;
+    const maxSymlinkCount = 10; // Prevent infinite loops
+    
+    for (let component of components) {
+      if (component === '' || component === '.') continue; // Skip empty or current dir
+      if (component === '..') {
+        // Move to parent, if exists
+        if (typeof current.parentInodeNumber === 'number') {
+          const inode = this.inodes[current.parentInodeNumber]
+          current = new Directory(inode)
+        }
+        continue;
+      }
+      
+      const inodeNumber = current.findInodeNumberByName(component);
+      if (!inodeNumber) throw new Error(`Path \`${path}\` cannot be resolved`);
+      const inode = this.inodes[inodeNumber];
+      
+      if (inode.type === InodeType.SYMLINK) {
+        if (++symlinkCount > maxSymlinkCount) throw new Error('Too many symlinks');
+        // Find target in a symlink Object
+        throw new Error('Sym links are not supported in the current version');
+        const targetPath = inode.target;
+        return this.resolvePath(targetPath); // Resolve symlink target
+      }
+      
+      current = new Directory(inode);
+    }
+    
+    return current;
+  }
+  
+  
+  /**
+   *
+   * @param {string} path - path of a new dir to be resolved
+   */
+  mkdir(path) {
+    /**
+     * @type {Directory | undefined}
+     */
+    let resolvedPath;
+    
+    const newPathHasSlash = path.includes('/');
+    
+    if (!newPathHasSlash) {
+      path = `./${path}`;
+    }
+    
+    try {
+      resolvedPath = this.resolvePath(path);
+    } catch (e) {
+    }
+    
+    if (resolvedPath) throw new Error(`Directory \`${path}\` already exists`)
+    
+    const pathWithoutLastComponent = path.split('/').slice(0, -1).join('/');
+    const dirName = path.split('/').pop();
+    
+    console.log('dirname', dirName)
+    
+    const parentDirectory = this.resolvePath(pathWithoutLastComponent);
+    
+    const dirInode = this.getFreeInode(InodeType.DIRECTORY);
+    
+    console.log('parentDirectory', parentDirectory)
+    
+    new Directory(dirInode, dirName, parentDirectory.inode.inodeNumber);
+    
+    parentDirectory.createDirectoryEntry(dirName, dirInode.inodeNumber);
+  }
+  
+  cd(path) {
+    this.currentDirectory = this.resolvePath(path);
+  }
+  
 }
