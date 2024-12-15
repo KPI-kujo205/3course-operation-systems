@@ -224,13 +224,17 @@ export class FileSystem {
 	stat(name) {
 		const inode = this.getInodeByName(name);
 
-		console.log(`\nFile ${name} stats:`);
-		console.log(`Type: ${inode.type === "f" ? "File" : "Directory"}`);
-		console.log(`Size: ${inode.size} bytes`);
-		console.log(`Inode: ${inode.inodeNumber}`);
-		console.log(`Links: ${inode.linkCount}`);
-		console.log(`Created: ${new Date(inode.createdAt)}`);
-		console.log(`Modified: ${new Date(inode.modifiedAt)}\n`);
+		const text = `
+    File ${name} stats:
+    Type: ${inode.type === "f" ? "File" : "Directory"}
+    Size: ${inode.size} bytes
+    Inode: ${inode.inodeNumber}
+    Links: ${inode.linkCount}
+    Created: ${new Date(inode.createdAt)}
+    Modified: ${new Date(inode.modifiedAt)}
+    `;
+		console.log(text);
+		return text;
 	}
 
 	open(name) {
