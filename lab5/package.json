@@ -1,15 +1,20 @@
 {
-  "name": "lab4",
-  "version": "1.0.0",
-  "main": "Program.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "",
-  "license": "ISC",
-  "description": "",
-  "devDependencies": {
-    "@biomejs/biome": "1.9.4"
-  },
-  "type": "module"
+	"name": "lab5",
+	"version": "1.0.0",
+	"main": "Program.js",
+	"scripts": {
+		"test": "jest",
+		"test:watch": "jest --watch"
+	},
+	"author": "",
+	"license": "ISC",
+	"description": "",
+	"devDependencies": {
+		"@babel/core": "^7.26.0",
+		"@babel/preset-env": "^7.26.0",
+		"@biomejs/biome": "1.9.4",
+		"babel-jest": "^29.7.0",
+		"jest": "^29.7.0"
+	},
+	"type": "module"
 }
