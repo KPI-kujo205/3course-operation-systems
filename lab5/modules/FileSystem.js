@@ -2,6 +2,7 @@ import * as constants from "node:constants";
 import { Directory } from "./Directory.js";
 import { Inode, InodeType } from "./Inode.js";
 import { SimpleFile } from "./SimpleFile.js";
+import { SymLink } from "./SymLink.js";
 import { Utils } from "./Utils.js";
 import { FSConfig } from "./fsConfig.js";
 
@@ -108,7 +109,7 @@ export class FileSystem {
 	}
 
 	/**
-	 * type {@type } - 'f' for file, 'd' for directory
+	 * type {@type InodeType} - 'f' for file, 'd' for directory, 'l' for symlink
 	 * @return {Inode} - newly created Inode
 	 */
 	getFreeInode(type) {
@@ -125,10 +126,11 @@ export class FileSystem {
 	}
 
 	create(name) {
-		if (name.includes("/")) {
-			throw new Error(
-				"You cannot use `/` in the filename, directory creation is not supported in the current version",
-			);
+		const { lastSegment, parentPath } = Utils.getLastAndParentPathSegment(name);
+		const parentDirectory = this.resolvePath(parentPath);
+
+		if (parentDirectory.directoryEntries.has(lastSegment)) {
+			throw new Error("File already exists");
 		}
 
 		if (name.length > FSConfig.MAX_FILENAME_LENGTH)
@@ -140,7 +142,7 @@ export class FileSystem {
 
 		fileInode.linkCount++;
 
-		this.currentDirectory.createDirectoryEntry(name, fileInode.inodeNumber);
+		parentDirectory.createDirectoryEntry(lastSegment, fileInode.inodeNumber);
 	}
 
 	ls() {
@@ -153,10 +155,16 @@ export class FileSystem {
 		);
 
 		this.currentDirectory.directoryEntries.forEach((inodeNumber, name) => {
+			let entryName = name;
 			const inode = this.inodes[inodeNumber];
 			const type = inode.type;
+
+			if (type === InodeType.SYMLINK) {
+				const symlink = new SymLink(inode);
+				entryName = `${name} -> ${symlink.content}`;
+			}
 			console.log(
-				`${padRight(name, 20)}\t${padRight(type, 5)}\t${padLeft(inode.inodeNumber.toString(), 5)}`,
+				`${padRight(entryName, 20)}\t${padRight(type, 5)}\t${padLeft(inode.inodeNumber.toString(), 5)}`,
 			);
 		});
 	}
@@ -177,9 +185,26 @@ export class FileSystem {
 			throw new Error("Cannot open directory for reading");
 		}
 
-		const file = new SimpleFile(inode);
+		if (inode.type === "l") {
+			const symlink = new SymLink(inode);
 
-		return file.read(size, fileDescriptor.offset);
+			const contentInode = this.getInodeByName(symlink.content);
+
+			if (contentInode.type === InodeType.DIRECTORY) {
+				throw new Error("Cannot open directory for reading");
+			}
+
+			const file = new SimpleFile(contentInode);
+
+			return file.read(size, fileDescriptor.offset);
+		}
+
+		if (inode.type === "f") {
+			const file = new SimpleFile(inode);
+			return file.read(size, fileDescriptor.offset);
+		}
+
+		throw new Error(`Unknown file type \`${inode.type}\``);
 	}
 
 	/**
@@ -206,16 +231,15 @@ export class FileSystem {
 	 * @param {string} path
 	 */
 	getInodeByName(path) {
-		const sanitizePath = Utils.sanitizePath(path);
-		const components = sanitizePath.split("/");
-		const fileName = components.pop();
+		const { lastSegment, parentPath } = Utils.getLastAndParentPathSegment(path);
 
-		const dir = this.resolvePath(components.join("/"));
-		const fileInodeNumber = dir.directoryEntries.get(fileName);
+		const dir = this.resolvePath(parentPath);
+
+		const fileInodeNumber = dir.directoryEntries.get(lastSegment);
 
 		if (!fileInodeNumber)
 			throw new Error(
-				`File \`${path}\` not found while trying to delete a file`,
+				`File \`${path}\` not found while trying to get an inode by path`,
 			);
 
 		return this.inodes[fileInodeNumber];
@@ -238,10 +262,19 @@ export class FileSystem {
 	}
 
 	open(name) {
+		const { lastSegment, parentPath } = Utils.getLastAndParentPathSegment(name);
+		const parentDirectory = this.resolvePath(parentPath);
+
+		if (!parentDirectory.directoryEntries.has(lastSegment)) {
+			throw new Error("File not found");
+		}
+
 		const inode = this.getInodeByName(name);
 		const inodeNumber = inode.inodeNumber;
+
 		const fd = this.nextFd++;
 		this.openFileDescriptors.set(fd, { inodeNumber, offset: 0 });
+
 		console.log(`File ${name} opened with descriptor ${fd}`);
 		return fd;
 	}
@@ -438,9 +471,10 @@ export class FileSystem {
 			if (inode.type === InodeType.SYMLINK) {
 				if (++symlinkCount > maxSymlinkCount)
 					throw new Error("Too many symlinks");
-				// Find target in a symlink Object
-				throw new Error("Sym links are not supported in the current version");
-				const targetPath = inode.target;
+
+				const symlink = new SymLink(inode);
+				const targetPath = symlink.content;
+
 				return this.resolvePath(targetPath); // Resolve symlink target
 			}
 
@@ -500,10 +534,12 @@ export class FileSystem {
 			);
 		}
 
-		const parentDirectory = this.resolvePath("..");
-		const dirName = Utils.getLastPathSegment(sanitizePath);
+		const { lastSegment, parentPath } =
+			Utils.getLastAndParentPathSegment(sanitizePath);
 
-		parentDirectory.directoryEntries.delete(dirName);
+		const parentDirectory = this.resolvePath(parentPath);
+
+		parentDirectory.directoryEntries.delete(lastSegment);
 		parentDirectory.save();
 
 		const inode = directory.inode;
@@ -520,5 +556,35 @@ export class FileSystem {
 
 	cd(path) {
 		this.currentDirectory = this.resolvePath(path);
+	}
+
+	/**
+	 * @param {string} content - content of the symlink
+	 * @param {string} symLinkPath - path to the symlink
+	 */
+	symlink(content, symLinkPath) {
+		let inode;
+
+		try {
+			const inode = this.getInodeByName(symLinkPath);
+		} catch (e) {}
+
+		if (inode) throw new Error(`File \`${symLinkPath}\` already exists`);
+
+		const sanitizedPath = Utils.sanitizePath(symLinkPath);
+
+		const { lastSegment, parentPath } =
+			Utils.getLastAndParentPathSegment(sanitizedPath);
+
+		const freeSymLinkInode = this.getFreeInode("l");
+
+		new SymLink(freeSymLinkInode, content);
+
+		const parentDirectory = this.resolvePath(parentPath);
+
+		parentDirectory.createDirectoryEntry(
+			lastSegment,
+			freeSymLinkInode.inodeNumber,
+		);
 	}
 }
