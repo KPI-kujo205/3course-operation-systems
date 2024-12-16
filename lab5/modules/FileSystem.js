@@ -1,4 +1,3 @@
-import * as constants from "node:constants";
 import { Directory } from "./Directory.js";
 import { Inode, InodeType } from "./Inode.js";
 import { SimpleFile } from "./SimpleFile.js";
