@@ -126,6 +126,8 @@ export class FileSystem {
 
 	create(name) {
 		const { lastSegment, parentPath } = Utils.getLastAndParentPathSegment(name);
+
+		console.log(lastSegment, parentPath);
 		const parentDirectory = this.resolvePath(parentPath);
 
 		if (parentDirectory.directoryEntries.has(lastSegment)) {
@@ -142,6 +144,8 @@ export class FileSystem {
 		fileInode.linkCount++;
 
 		parentDirectory.createDirectoryEntry(lastSegment, fileInode.inodeNumber);
+
+		console.log("parentDir", parentDirectory.directoryEntries);
 	}
 
 	ls() {
@@ -452,7 +456,9 @@ export class FileSystem {
 		let symlinkCount = 0;
 		const maxSymlinkCount = 10; // Prevent infinite loops
 
-		for (const component of components) {
+		for (let i = 0; i < components.length; i++) {
+			const component = components[i];
+
 			if (component === "" || component === ".") continue; // Skip empty or current dir
 			if (component === "..") {
 				// Move to parent, if exists
@@ -464,7 +470,8 @@ export class FileSystem {
 			}
 
 			const inodeNumber = current.findInodeNumberByName(component);
-			if (!inodeNumber) throw new Error(`Path \`${path}\` cannot be resolved`);
+			if (inodeNumber === undefined)
+				throw new Error(`Path \`${path}\` cannot be resolved`);
 			const inode = this.inodes[inodeNumber];
 
 			if (inode.type === InodeType.SYMLINK) {
@@ -472,9 +479,11 @@ export class FileSystem {
 					throw new Error("Too many symlinks");
 
 				const symlink = new SymLink(inode);
-				const targetPath = symlink.content;
+				components[i] = symlink.content;
 
-				return this.resolvePath(targetPath); // Resolve symlink target
+				const newPath = components.join("/");
+
+				return this.resolvePath(newPath);
 			}
 
 			current = new Directory(inode);

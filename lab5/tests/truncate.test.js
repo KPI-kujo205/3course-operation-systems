@@ -17,6 +17,7 @@ describe("file operations with truncate", () => {
 
 	test("creates a file", () => {
 		fs.create("example.txt");
+
 		expect(
 			fs.currentDirectory.directoryEntries.get("example.txt"),
 		).toBeDefined();

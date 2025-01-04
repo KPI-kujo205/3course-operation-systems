@@ -62,4 +62,39 @@ describe("Sym Link Operations", () => {
 
 		expect(textReadUsingSymlink).toEqual(text);
 	});
+
+	test("Can read file under directory which is a symlink", () => {
+		fs.mkdir("a");
+		fs.mkdir("a/b");
+		fs.mkdir("a/b/c");
+
+		fs.create("a/b/c/example.txt");
+
+		const fd = fs.open("a/b/c/example.txt");
+
+		fs.write(fd, Buffer.from(text));
+
+		fs.symlink("./a/b", "symlink");
+
+		const slFd = fs.open("symlink/c/example.txt");
+
+		const textReadUsingSymlink = fs.read(slFd, 100);
+
+		expect(textReadUsingSymlink).toEqual(text);
+		// fs.create("dir1/example1.txt");
+		//
+		// const fd = fs.open("dir1/example1.txt");
+		//
+		// fs.write(fd, Buffer.from(text));
+		//
+		// fs.close(fd);
+		//
+		// fs.symlink("dir1", "symlink");
+		//
+		// const slFd = fs.open("symlink/example1.txt");
+		//
+		// const textReadUsingSymlink = fs.read(slFd, 100);
+		//
+		// expect(textReadUsingSymlink).toEqual(text);
+	});
 });
